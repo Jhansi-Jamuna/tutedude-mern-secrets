@@ -9,7 +9,7 @@ app.use(express.urlencoded({extended: true}));
 app.use(express.static('public'))
 
 const mongoose=require("mongoose");
-mongoose.connect("mongodb+srv://dbjhansi:jhansi2313@cluster0.qtgjfiz.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0");
+mongoose.connect("mongodb+srv://jamunapawar12:jhansi2313@secondsdb.nfyn5ad.mongodb.net/?retryWrites=true&w=majority&appName=secondsdb");
 const trySchema=new mongoose.Schema({
     email:String,
     password:String
