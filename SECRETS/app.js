@@ -83,7 +83,7 @@
 require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 const User = require("./models/userSchema");
 const app = express();
 const PORT = process.env.PORT || 5000;
