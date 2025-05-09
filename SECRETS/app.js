@@ -84,7 +84,9 @@ require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
+const session = require("express-session");
 const User = require("./models/userSchema");
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -93,127 +95,136 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static("public"));
 app.set("view engine", "ejs");
 
-// MongoDB Connection
-mongoose.connect("mongodb+srv://jamunapawar12:jhansi2313@secondsdb.nfyn5ad.mongodb.net/userDB?retryWrites=true&w=majority&appName=secondsdb", {
+app.use(
+  session({
+    secret: "VPnuEL6WpHZv9nuGrize", // Use process.env.SECRET in production
+    resave: false,
+    saveUninitialized: false,
+  })
+);
+
+// MongoDB Connection with Mongoose Atlas URI
+mongoose
+  .connect("mongodb+srv://jamunapawar12:jhansi2313@secondsdb.nfyn5ad.mongodb.net/userDB?retryWrites=true&w=majority&appName=secondsdb", {
     useNewUrlParser: true,
     useUnifiedTopology: true,
-})
-    .then(() => console.log("MongoDB Connected"))
-    .catch((err) => console.error("MongoDB Error:", err));
-
-// Simple in-memory session (not for production)
-let loggedInUser = null;
+  })
+  .then(() => console.log("MongoDB Connected"))
+  .catch((err) => console.error("MongoDB Error:", err));
 
 // Email and password regex
 const emailRegex = /^\S+@\S+\.\S+$/;
 const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{6,}$/;
 
+// Middleware to protect routes
+const requireLogin = async (req, res, next) => {
+  if (!req.session.userId) return res.redirect("/login");
+  next();
+};
+
 // Routes
 
-// Home page
 app.get("/", (req, res) => {
-    res.render("home");
+  res.render("home");
 });
 
-// Register page
 app.get("/register", (req, res) => {
-    res.render("register");
+  res.render("register");
 });
 
-// Register logic
 app.post("/register", async (req, res) => {
-    const { name, username: email, password } = req.body;
+  const { name, username: email, password } = req.body;
 
-    if (!emailRegex.test(email)) {
-        return res.send("Invalid email format");
-    }
+  if (!emailRegex.test(email)) {
+    return res.send("Invalid email format");
+  }
 
-    if (!passwordRegex.test(password)) {
-        return res.send("Password must have at least one uppercase, one lowercase, one number, and be at least 6 characters long.");
-    }
+  if (!passwordRegex.test(password)) {
+    return res.send(
+      "Password must contain uppercase, lowercase, a number, and be at least 6 characters."
+    );
+  }
 
-    try {
-        const existingUser = await User.findOne({ email });
-        if (existingUser) return res.send("Email already registered");
+  try {
+    const existingUser = await User.findOne({ email });
+    if (existingUser) return res.send("Email already registered");
 
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const user = new User({ name, email, password: hashedPassword });
-        await user.save();
-        res.redirect("/login");
-    } catch (err) {
-        console.error(err);
-        res.send("Error registering user");
-    }
-});
-
-// Login page
-app.get("/login", (req, res) => {
-    res.render("login");
-});
-
-// Login logic
-app.post("/login", async (req, res) => {
-    const { username: email, password } = req.body;
-
-    if (!emailRegex.test(email)) {
-        return res.send("Invalid email format");
-    }
-
-    if (!password) return res.send("Password required");
-
-    try {
-        const user = await User.findOne({ email });
-        if (!user) return res.send("User not found");
-
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) return res.send("Incorrect password");
-
-        loggedInUser = user;
-        res.redirect("/secrets");
-    } catch (err) {
-        console.error(err);
-        res.send("Error during login");
-    }
-});
-
-// Protected page
-app.get("/secrets", (req, res) => {
-    if (!loggedInUser) {
-        return res.redirect("/login");
-    }
-    res.render("secrets", { user: loggedInUser });
-});
-
-// Logout
-app.get("/logout", (req, res) => {
-    loggedInUser = null;
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = new User({ name, email, password: hashedPassword });
+    await newUser.save();
     res.redirect("/login");
+  } catch (err) {
+    console.error(err);
+    res.send("Error registering user");
+  }
 });
 
-app.get("/submit", (req, res) => {
-    if (!loggedInUser) {
-        return res.redirect("/login");
-    }
-    res.render("submit", { user: loggedInUser });
+app.get("/login", (req, res) => {
+  res.render("login");
 });
 
+app.post("/login", async (req, res) => {
+  const { username: email, password } = req.body;
 
-app.post("/submit", async (req, res) => {
-    if (!loggedInUser) return res.redirect("/login");
+  if (!emailRegex.test(email)) {
+    return res.send("Invalid email format");
+  }
 
-    const { secret } = req.body;
+  if (!password) return res.send("Password required");
 
-    try {
-        await User.findByIdAndUpdate(loggedInUser._id, { secret });
-        res.redirect("/secrets");
-    } catch (err) {
-        console.error(err);
-        res.send("Error submitting secret");
-    }
+  try {
+    const user = await User.findOne({ email });
+    if (!user) return res.send("User not found");
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.send("Incorrect password");
+
+    req.session.userId = user._id;
+    res.redirect("/secrets");
+  } catch (err) {
+    console.error(err);
+    res.send("Error during login");
+  }
 });
 
+app.get("/secrets", requireLogin, async (req, res) => {
+  try {
+    const user = await User.findById(req.session.userId);
+    res.render("secrets", { user });
+  } catch (err) {
+    console.error(err);
+    res.send("Error loading secrets");
+  }
+});
 
-// Start server
+app.get("/submit", requireLogin, async (req, res) => {
+  try {
+    const user = await User.findById(req.session.userId);
+    res.render("submit", { user });
+  } catch (err) {
+    console.error(err);
+    res.send("Error loading submit page");
+  }
+});
+
+app.post("/submit", requireLogin, async (req, res) => {
+  const { secret } = req.body;
+
+  try {
+    await User.findByIdAndUpdate(req.session.userId, { secret });
+    res.redirect("/secrets");
+  } catch (err) {
+    console.error(err);
+    res.send("Error submitting secret");
+  }
+});
+
+app.get("/logout", (req, res) => {
+  req.session.destroy(() => {
+    res.redirect("/login");
+  });
+});
+
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
