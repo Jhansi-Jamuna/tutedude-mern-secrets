@@ -123,69 +123,110 @@ const requireLogin = async (req, res, next) => {
 };
 
 // Routes
-
-app.get("/", (req, res) => {
-  res.render("home");
-});
-
+// Show empty registration form
 app.get("/register", (req, res) => {
-  res.render("register");
+  res.render("register", {
+    error: null,
+    formData: { email: "" }
+  });
 });
 
 app.post("/register", async (req, res) => {
   const { name, username: email, password } = req.body;
+  const formData = { email };
 
   if (!emailRegex.test(email)) {
-    return res.send("Invalid email format");
+    return res.render("register", {
+      error: "Invalid email format",
+      formData
+    });
   }
 
   if (!passwordRegex.test(password)) {
-    return res.send(
-      "Password must contain uppercase, lowercase, a number, and be at least 6 characters."
-    );
+    return res.render("register", {
+      error: "Password must contain uppercase, lowercase, a number, and be at least 6 characters.",
+      formData
+    });
   }
 
   try {
     const existingUser = await User.findOne({ email });
-    if (existingUser) return res.send("Email already registered");
+    if (existingUser) {
+      return res.render("register", {
+        error: "Email already registered",
+        formData
+      });
+    }
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const newUser = new User({ name, email, password: hashedPassword });
     await newUser.save();
-    res.redirect("/login");
+
+    return res.redirect("/login");
   } catch (err) {
     console.error(err);
-    res.send("Error registering user");
+    return res.render("register", {
+      error: "Error registering user, please try again",
+      formData
+    });
   }
 });
 
-app.get("/login", (req, res) => {
-  res.render("login");
+
+app.get('/login', (req, res) => {
+  res.render('login', {
+    error: null,
+    formData: { email: '' }
+  });
 });
 
-app.post("/login", async (req, res) => {
+app.post('/login', async (req, res) => {
   const { username: email, password } = req.body;
+  const formData = { email };
 
   if (!emailRegex.test(email)) {
-    return res.send("Invalid email format");
+    return res.render('login', {
+      error: 'Invalid email format',
+      formData
+    });
   }
 
-  if (!password) return res.send("Password required");
+  if (!password) {
+    return res.render('login', {
+      error: 'Password is required',
+      formData
+    });
+  }
 
   try {
     const user = await User.findOne({ email });
-    if (!user) return res.send("User not found");
+    if (!user) {
+      return res.render('login', {
+        error: 'No account found with that email',
+        formData
+      });
+    }
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.send("Incorrect password");
+    if (!isMatch) {
+      return res.render('login', {
+        error: 'Incorrect password',
+        formData
+      });
+    }
 
     req.session.userId = user._id;
-    res.redirect("/secrets");
+    return res.redirect('/secrets');
+
   } catch (err) {
     console.error(err);
-    res.send("Error during login");
+    return res.render('login', {
+      error: 'Invalid email or password, try again.',
+      formData
+    });
   }
 });
+
 
 app.get("/secrets", requireLogin, async (req, res) => {
   try {
